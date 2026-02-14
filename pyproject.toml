@@ -30,7 +30,7 @@ select = ["E", "F", "I", "UP", "B"]
 [tool.ruff.format]
 quote-style = "double"
 
-[tool.ty]
+[tool.ty.environment]
 python-version = "3.14"
 
 [tool.pytest.ini_options]
