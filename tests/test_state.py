@@ -2,6 +2,7 @@
 
 import json
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 from australianewsrss.models import DiscoveredFeed
 from australianewsrss.state import FeedRegistry, HttpCache
@@ -19,7 +20,7 @@ def make_feed(**overrides: object) -> DiscoveredFeed:
         "first_seen": datetime(2026, 1, 1, tzinfo=UTC),
     }
     defaults.update(overrides)
-    return DiscoveredFeed(**defaults)
+    return DiscoveredFeed(**defaults)  # type: ignore[arg-type]
 
 
 # ---------------------------------------------------------------------------
@@ -30,7 +31,7 @@ def make_feed(**overrides: object) -> DiscoveredFeed:
 class TestFeedRegistryPersistence:
     """Save/load round-trips and empty-state behaviour."""
 
-    def test_save_then_load_round_trips(self, tmp_path: object) -> None:
+    def test_save_then_load_round_trips(self, tmp_path: Path) -> None:
         feeds = [
             make_feed(url="https://abc.net.au/feed/1", feed_id="1"),
             make_feed(url="https://abc.net.au/feed/2", feed_id="2"),
@@ -43,16 +44,12 @@ class TestFeedRegistryPersistence:
         urls = {f.url for f in loaded}
         assert urls == {"https://abc.net.au/feed/1", "https://abc.net.au/feed/2"}
 
-    def test_load_returns_empty_list_when_file_missing(
-        self, tmp_path: object
-    ) -> None:
+    def test_load_returns_empty_list_when_file_missing(self, tmp_path: Path) -> None:
         registry = FeedRegistry(tmp_path)
         loaded = registry.load()
         assert loaded == []
 
-    def test_feeds_json_sorted_by_publisher_then_url(
-        self, tmp_path: object
-    ) -> None:
+    def test_feeds_json_sorted_by_publisher_then_url(self, tmp_path: Path) -> None:
         feeds = [
             make_feed(
                 publisher="sbs",
@@ -87,9 +84,7 @@ class TestFeedRegistryPersistence:
 class TestFeedRegistryUpsert:
     """Upsert adds new feeds and updates existing ones."""
 
-    def test_upsert_adds_new_feed_with_first_seen(
-        self, tmp_path: object
-    ) -> None:
+    def test_upsert_adds_new_feed_with_first_seen(self, tmp_path: Path) -> None:
         registry = FeedRegistry(tmp_path)
         feed = make_feed()
         before = datetime.now(UTC)
@@ -103,7 +98,7 @@ class TestFeedRegistryUpsert:
         assert before <= stored[0].first_seen <= after
 
     def test_upsert_updates_last_seen_without_changing_first_seen(
-        self, tmp_path: object
+        self, tmp_path: Path
     ) -> None:
         registry = FeedRegistry(tmp_path)
 
@@ -125,7 +120,7 @@ class TestFeedRegistryUpsert:
 class TestFeedRegistryQuery:
     """Filtering and status management."""
 
-    def test_get_feeds_filters_by_publisher(self, tmp_path: object) -> None:
+    def test_get_feeds_filters_by_publisher(self, tmp_path: Path) -> None:
         registry = FeedRegistry(tmp_path)
         registry.upsert(
             make_feed(
@@ -153,7 +148,7 @@ class TestFeedRegistryQuery:
         all_feeds = registry.get_feeds()
         assert len(all_feeds) == 2
 
-    def test_mark_status_changes_feed_status(self, tmp_path: object) -> None:
+    def test_mark_status_changes_feed_status(self, tmp_path: Path) -> None:
         registry = FeedRegistry(tmp_path)
         feed = make_feed()
         registry.upsert(feed)
@@ -167,9 +162,7 @@ class TestFeedRegistryQuery:
 class TestFeedRegistryStaleness:
     """Staleness marking per AC1.6."""
 
-    def test_mark_stale_feeds_marks_old_feeds_as_stale(
-        self, tmp_path: object
-    ) -> None:
+    def test_mark_stale_feeds_marks_old_feeds_as_stale(self, tmp_path: Path) -> None:
         registry = FeedRegistry(tmp_path)
 
         old_feed = make_feed(
@@ -196,9 +189,7 @@ class TestFeedRegistryStaleness:
         stale_feed = [f for f in reloaded if f.url == old_feed.url][0]
         assert stale_feed.status == "stale"
 
-    def test_mark_stale_feeds_does_not_affect_dead_feeds(
-        self, tmp_path: object
-    ) -> None:
+    def test_mark_stale_feeds_does_not_affect_dead_feeds(self, tmp_path: Path) -> None:
         registry = FeedRegistry(tmp_path)
 
         dead_feed = make_feed(
@@ -231,7 +222,7 @@ class TestFeedRegistryStaleness:
 class TestHttpCacheOperations:
     """Core put/get/clear operations."""
 
-    def test_put_then_get_returns_stored_data(self, tmp_path: object) -> None:
+    def test_put_then_get_returns_stored_data(self, tmp_path: Path) -> None:
         cache = HttpCache(tmp_path / "cache.db")
         cache.put("https://example.com/feed", '"etag-123"', "<rss>data</rss>")
 
@@ -239,15 +230,13 @@ class TestHttpCacheOperations:
         assert etag == '"etag-123"'
         assert data == "<rss>data</rss>"
 
-    def test_get_returns_none_for_unknown_url(
-        self, tmp_path: object
-    ) -> None:
+    def test_get_returns_none_for_unknown_url(self, tmp_path: Path) -> None:
         cache = HttpCache(tmp_path / "cache.db")
         etag, data = cache.get("https://example.com/nonexistent")
         assert etag is None
         assert data is None
 
-    def test_put_overwrites_existing_entry(self, tmp_path: object) -> None:
+    def test_put_overwrites_existing_entry(self, tmp_path: Path) -> None:
         cache = HttpCache(tmp_path / "cache.db")
         url = "https://example.com/feed"
 
@@ -258,7 +247,7 @@ class TestHttpCacheOperations:
         assert etag == '"etag-2"'
         assert data == "data-2"
 
-    def test_clear_removes_all_entries(self, tmp_path: object) -> None:
+    def test_clear_removes_all_entries(self, tmp_path: Path) -> None:
         cache = HttpCache(tmp_path / "cache.db")
         cache.put("https://example.com/a", '"e1"', "d1")
         cache.put("https://example.com/b", '"e2"', "d2")
@@ -272,7 +261,7 @@ class TestHttpCacheOperations:
 class TestHttpCacheConfiguration:
     """Database configuration checks."""
 
-    def test_database_uses_wal_mode(self, tmp_path: object) -> None:
+    def test_database_uses_wal_mode(self, tmp_path: Path) -> None:
         cache = HttpCache(tmp_path / "cache.db")
         conn = cache._connect()
         try:

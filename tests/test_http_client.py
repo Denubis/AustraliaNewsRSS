@@ -1,6 +1,8 @@
 """Tests for australianewsrss.http_client PoliteHttpClient (AC5 criteria)."""
 
 import time
+from collections.abc import Callable
+from pathlib import Path
 
 import httpx
 import pytest
@@ -10,8 +12,8 @@ from australianewsrss.state import HttpCache
 
 
 def _make_client(
-    tmp_path: object,
-    handler: object,
+    tmp_path: Path,
+    handler: Callable[[httpx.Request], httpx.Response],
     delay_ms: int = 0,
 ) -> PoliteHttpClient:
     """Build a PoliteHttpClient with a mock transport for testing.
@@ -22,9 +24,7 @@ def _make_client(
     cache = HttpCache(tmp_path / "cache.db")
     client = PoliteHttpClient(cache, delay_ms=delay_ms)
     transport = httpx.MockTransport(handler)
-    client._client = httpx.Client(
-        transport=transport, headers=client._client.headers
-    )
+    client._client = httpx.Client(transport=transport, headers=client._client.headers)
     return client
 
 
@@ -36,7 +36,7 @@ def _make_client(
 class TestETagConditionalGet:
     """ETag caching and If-None-Match conditional GET (AC5.1)."""
 
-    def test_etag_from_200_is_stored_in_cache(self, tmp_path: object) -> None:
+    def test_etag_from_200_is_stored_in_cache(self, tmp_path: Path) -> None:
         """First GET returns 200 with ETag; ETag is persisted in HttpCache."""
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -56,9 +56,7 @@ class TestETagConditionalGet:
         assert etag == '"abc123"'
         assert data == "<rss>content</rss>"
 
-    def test_subsequent_request_sends_if_none_match(
-        self, tmp_path: object
-    ) -> None:
+    def test_subsequent_request_sends_if_none_match(self, tmp_path: Path) -> None:
         """After caching an ETag, next request includes If-None-Match header."""
         captured_requests: list[httpx.Request] = []
         call_count = 0
@@ -89,7 +87,7 @@ class TestETagConditionalGet:
         assert second_req.headers.get("if-none-match") == '"etag-v1"'
 
     def test_304_returns_cached_content_with_was_cached_true(
-        self, tmp_path: object
+        self, tmp_path: Path
     ) -> None:
         """On 304, client returns cached body and was_cached=True."""
         call_count = 0
@@ -117,7 +115,7 @@ class TestETagConditionalGet:
         assert cached2 is True
         assert body2 == "<rss>original</rss>"
 
-    def test_etag_end_to_end_flow(self, tmp_path: object) -> None:
+    def test_etag_end_to_end_flow(self, tmp_path: Path) -> None:
         """Full cycle: 200 with ETag -> cache -> If-None-Match -> 304 -> cached body."""
         captured_requests: list[httpx.Request] = []
         call_count = 0
@@ -164,7 +162,7 @@ class TestETagConditionalGet:
 class TestRateLimiting:
     """Per-domain rate limiting (AC5.2)."""
 
-    def test_same_domain_requests_are_delayed(self, tmp_path: object) -> None:
+    def test_same_domain_requests_are_delayed(self, tmp_path: Path) -> None:
         """Two rapid requests to the same domain must be >= 300ms apart."""
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -179,9 +177,7 @@ class TestRateLimiting:
 
         assert elapsed >= 0.3, f"Expected >= 300ms delay, got {elapsed * 1000:.0f}ms"
 
-    def test_different_domains_are_not_delayed(
-        self, tmp_path: object
-    ) -> None:
+    def test_different_domains_are_not_delayed(self, tmp_path: Path) -> None:
         """Requests to different domains are not delayed."""
 
         def handler(request: httpx.Request) -> httpx.Response:
@@ -215,7 +211,7 @@ class TestUserAgent:
         "(+https://github.com/BrianBallworthy/AustraliaNewsRSS; feed aggregation)"
     )
 
-    def test_get_request_includes_user_agent(self, tmp_path: object) -> None:
+    def test_get_request_includes_user_agent(self, tmp_path: Path) -> None:
         """GET requests include the correct User-Agent header."""
         captured_requests: list[httpx.Request] = []
 
@@ -229,9 +225,7 @@ class TestUserAgent:
         assert len(captured_requests) == 1
         assert captured_requests[0].headers["user-agent"] == self._EXPECTED_UA
 
-    def test_head_request_includes_user_agent(
-        self, tmp_path: object
-    ) -> None:
+    def test_head_request_includes_user_agent(self, tmp_path: Path) -> None:
         """HEAD requests include the correct User-Agent header."""
         captured_requests: list[httpx.Request] = []
 
@@ -254,9 +248,7 @@ class TestUserAgent:
 class TestRetryAfter:
     """Retry-After handling for 429 responses (AC5.4)."""
 
-    def test_429_with_retry_after_retries_successfully(
-        self, tmp_path: object
-    ) -> None:
+    def test_429_with_retry_after_retries_successfully(self, tmp_path: Path) -> None:
         """429 with Retry-After triggers wait then retry; 200 succeeds."""
         call_count = 0
 
@@ -264,12 +256,8 @@ class TestRetryAfter:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                return httpx.Response(
-                    429, headers={"Retry-After": "1"}
-                )
-            return httpx.Response(
-                200, text="success", headers={"ETag": '"retry-ok"'}
-            )
+                return httpx.Response(429, headers={"Retry-After": "1"})
+            return httpx.Response(200, text="success", headers={"ETag": '"retry-ok"'})
 
         client = _make_client(tmp_path, handler)
 
@@ -284,6 +272,39 @@ class TestRetryAfter:
             f"Expected >= 1s delay for Retry-After, got {elapsed:.2f}s"
         )
 
+    def test_429_with_http_date_retry_after(self, tmp_path: Path) -> None:
+        """When Retry-After contains HTTP-date, client computes delay and retries."""
+        from datetime import UTC, datetime, timedelta
+        from email.utils import format_datetime
+
+        call_count = 0
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                # Set retry_time to 2 seconds in the future (accounts for parsing delay)
+                retry_time = datetime.now(UTC) + timedelta(seconds=2)
+                return httpx.Response(
+                    429,
+                    headers={"Retry-After": format_datetime(retry_time)},
+                )
+            return httpx.Response(200, text="ok", headers={"ETag": '"http-date-ok"'})
+
+        client = _make_client(tmp_path, handler)
+
+        start = time.monotonic()
+        body, was_cached = client.get("http://example.com/feed.xml")
+        elapsed = time.monotonic() - start
+
+        assert body == "ok"
+        assert was_cached is False
+        assert call_count == 2
+        # Verify delay occurred (at least 1.2s to ensure HTTP-date was parsed)
+        assert elapsed >= 1.2, (
+            f"Expected >= 1.2s delay for HTTP-date Retry-After, got {elapsed:.2f}s"
+        )
+
 
 # ---------------------------------------------------------------------------
 # HEAD request
@@ -293,7 +314,7 @@ class TestRetryAfter:
 class TestHeadRequest:
     """HEAD request returns status code (no body)."""
 
-    def test_head_returns_200(self, tmp_path: object) -> None:
+    def test_head_returns_200(self, tmp_path: Path) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200)
 
@@ -301,7 +322,7 @@ class TestHeadRequest:
         status = client.head("https://example.com/feed")
         assert status == 200
 
-    def test_head_returns_404(self, tmp_path: object) -> None:
+    def test_head_returns_404(self, tmp_path: Path) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(404)
 
@@ -318,7 +339,7 @@ class TestHeadRequest:
 class TestErrorHandling:
     """HttpError raised on non-retryable failures."""
 
-    def test_404_raises_http_error(self, tmp_path: object) -> None:
+    def test_404_raises_http_error(self, tmp_path: Path) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(404)
 
@@ -339,7 +360,7 @@ class TestErrorHandling:
 class TestContextManager:
     """Context manager properly closes client."""
 
-    def test_context_manager_closes_client(self, tmp_path: object) -> None:
+    def test_context_manager_closes_client(self, tmp_path: Path) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             return httpx.Response(200, text="ok", headers={"ETag": '"x"'})
 

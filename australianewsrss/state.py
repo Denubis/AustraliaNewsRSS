@@ -36,7 +36,7 @@ class FeedRegistry:
         """Write feeds to feeds.json, sorted by publisher then URL."""
         sorted_feeds = sorted(feeds, key=lambda f: (f.publisher, f.url))
         data = [f.model_dump(mode="json") for f in sorted_feeds]
-        self._feeds_path.write_text(json.dumps(data, indent=2) + "\n")
+        self._feeds_path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
 
     def upsert(self, feed: DiscoveredFeed) -> None:
         """Add or update a feed by URL.
@@ -91,7 +91,7 @@ class FeedRegistry:
         stale: list[DiscoveredFeed] = []
 
         for url, feed in self._feeds.items():
-            if feed.status == "dead":
+            if feed.status != "active":
                 continue
             if feed.last_seen is not None and feed.last_seen < threshold:
                 updated = feed.model_copy(update={"status": "stale"})

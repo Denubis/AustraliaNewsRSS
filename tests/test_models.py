@@ -63,7 +63,7 @@ class TestDiscoveredFeed:
     def test_invalid_publisher_rejected(self) -> None:
         with pytest.raises(ValidationError):
             DiscoveredFeed(
-                publisher="bbc",
+                publisher="bbc",  # type: ignore[arg-type]
                 url="https://bbc.co.uk/feed",
                 title="BBC",
                 category_hint="news",
@@ -80,7 +80,7 @@ class TestDiscoveredFeed:
                 title="ABC",
                 category_hint="news",
                 feed_id="abc-news",
-                status="unknown",
+                status="unknown",  # type: ignore[arg-type]
                 first_seen=NOW,
             )
 
@@ -247,8 +247,8 @@ class TestNormalisedArticle:
             guid="g",
             categories=("news",),
         )
-        a = NormalisedArticle(**kwargs)
-        b = NormalisedArticle(**kwargs)
+        a = NormalisedArticle(**kwargs)  # type: ignore[arg-type]
+        b = NormalisedArticle(**kwargs)  # type: ignore[arg-type]
         assert a == b
         assert hash(a) == hash(b)
         assert len({a, b}) == 1
@@ -331,8 +331,8 @@ class TestPublisherConfig:
             base_url="https://abc.net.au",
             seed_urls=("https://abc.net.au/feed",),
         )
-        a = PublisherConfig(**kwargs)
-        b = PublisherConfig(**kwargs)
+        a = PublisherConfig(**kwargs)  # type: ignore[arg-type]
+        b = PublisherConfig(**kwargs)  # type: ignore[arg-type]
         assert hash(a) == hash(b)
 
 
@@ -360,7 +360,7 @@ class TestEnrichmentRule:
         with pytest.raises(ValidationError):
             EnrichmentRule(
                 publisher="abc",
-                pattern_type="body",
+                pattern_type="body",  # type: ignore[arg-type]
                 pattern=".*",
                 add_categories=("misc",),
             )
@@ -382,8 +382,8 @@ class TestEnrichmentRule:
             pattern="Jane.*",
             add_categories=("opinion",),
         )
-        a = EnrichmentRule(**kwargs)
-        b = EnrichmentRule(**kwargs)
+        a = EnrichmentRule(**kwargs)  # type: ignore[arg-type]
+        b = EnrichmentRule(**kwargs)  # type: ignore[arg-type]
         assert hash(a) == hash(b)
         assert len({a, b}) == 1
 
