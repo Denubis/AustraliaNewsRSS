@@ -11,3 +11,6 @@ wheels/
 
 # Ephemeral HTTP cache (rebuilt on cache miss)
 state/http_cache.db
+
+# Git worktrees
+.worktrees/
