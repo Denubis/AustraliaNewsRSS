@@ -1,5 +1,6 @@
 """ABC News feed discovery via CoreMedia collection IDs."""
 
+import logging
 import re
 from datetime import UTC, datetime
 
@@ -26,6 +27,8 @@ SEED_URLS = [
 ]
 
 FEED_URL_TEMPLATE = "https://www.abc.net.au/news/feed/{id}/rss.xml"
+
+logger = logging.getLogger(__name__)
 
 _COLLECTION_RE = re.compile(r"coremedia://(dynamic)?collection/(\d+)")
 
@@ -58,7 +61,8 @@ def discover_feeds(
         try:
             html, _cached = client.get(seed_url)
         except Exception:
-            continue  # Skip failed pages
+            logger.warning("Failed to fetch seed URL %s", seed_url, exc_info=True)
+            continue
         for is_dynamic, collection_id in _extract_collection_ids(html):
             # Keep track of dynamic status (dynamic wins if seen as both)
             if collection_id not in all_collections:
@@ -77,6 +81,7 @@ def discover_feeds(
         try:
             status_code = client.head(feed_url)
         except Exception:
+            logger.warning("Failed to probe feed URL %s", feed_url, exc_info=True)
             status_code = 0
 
         if status_code == 200:
