@@ -272,8 +272,45 @@ class TestRetryAfter:
             f"Expected >= 1s delay for Retry-After, got {elapsed:.2f}s"
         )
 
+    def test_parse_retry_after_http_date(self, tmp_path: Path) -> None:
+        """_parse_retry_after correctly parses HTTP-date to a delay."""
+        from datetime import UTC, datetime, timedelta
+        from email.utils import format_datetime
+
+        client = _make_client(
+            tmp_path,
+            lambda r: httpx.Response(200, text="ok"),
+        )
+
+        # HTTP-date 5 seconds in the future should produce ~5s delay
+        future = datetime.now(UTC) + timedelta(seconds=5)
+        delay = client._parse_retry_after(format_datetime(future))
+        assert 4.0 <= delay <= 5.5, f"Expected ~5s delay, got {delay:.2f}s"
+
+        # HTTP-date in the past should produce 0
+        past = datetime.now(UTC) - timedelta(seconds=10)
+        delay = client._parse_retry_after(format_datetime(past))
+        assert delay == 0.0
+
+    def test_parse_retry_after_integer(self, tmp_path: Path) -> None:
+        """_parse_retry_after returns float for integer strings."""
+        client = _make_client(
+            tmp_path,
+            lambda r: httpx.Response(200, text="ok"),
+        )
+        assert client._parse_retry_after("3") == 3.0
+        assert client._parse_retry_after("0") == 0.0
+
+    def test_parse_retry_after_invalid_falls_back(self, tmp_path: Path) -> None:
+        """_parse_retry_after returns 1.0 for unparseable values."""
+        client = _make_client(
+            tmp_path,
+            lambda r: httpx.Response(200, text="ok"),
+        )
+        assert client._parse_retry_after("not-a-date") == 1.0
+
     def test_429_with_http_date_retry_after(self, tmp_path: Path) -> None:
-        """When Retry-After contains HTTP-date, client computes delay and retries."""
+        """When Retry-After contains HTTP-date, client retries after delay."""
         from datetime import UTC, datetime, timedelta
         from email.utils import format_datetime
 
@@ -283,8 +320,7 @@ class TestRetryAfter:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                # Set retry_time to 2 seconds in the future (accounts for parsing delay)
-                retry_time = datetime.now(UTC) + timedelta(seconds=2)
+                retry_time = datetime.now(UTC) + timedelta(seconds=1)
                 return httpx.Response(
                     429,
                     headers={"Retry-After": format_datetime(retry_time)},
@@ -292,18 +328,11 @@ class TestRetryAfter:
             return httpx.Response(200, text="ok", headers={"ETag": '"http-date-ok"'})
 
         client = _make_client(tmp_path, handler)
-
-        start = time.monotonic()
         body, was_cached = client.get("http://example.com/feed.xml")
-        elapsed = time.monotonic() - start
 
         assert body == "ok"
         assert was_cached is False
         assert call_count == 2
-        # Verify delay occurred (at least 1.2s to ensure HTTP-date was parsed)
-        assert elapsed >= 1.2, (
-            f"Expected >= 1.2s delay for HTTP-date Retry-After, got {elapsed:.2f}s"
-        )
 
 
 # ---------------------------------------------------------------------------
