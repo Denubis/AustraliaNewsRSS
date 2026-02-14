@@ -272,5 +272,9 @@ def test_discovery_updates_existing_feed_timestamps(tmp_path: Path) -> None:
         # first_seen is preserved from original discovery
         assert second.first_seen == first.first_seen
         # last_seen and last_checked are updated
+        assert second.last_seen is not None
+        assert first.last_seen is not None
         assert second.last_seen >= first.last_seen
+        assert second.last_checked is not None
+        assert first.last_checked is not None
         assert second.last_checked >= first.last_checked
