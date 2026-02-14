@@ -116,8 +116,14 @@ def discover_feeds(
 
         status = "active" if status_code == 200 else "dead"
 
-        # Derive feed_id and title from URL
-        feed_id = feed_url.rstrip("/").rsplit("/", maxsplit=1)[-1]
+        # Derive feed_id from the URL path, extracting the meaningful segment
+        path = feed_url.replace("https://www.sbs.com.au/news/", "").rstrip("/")
+        if path == "feed":
+            feed_id = "main"
+        elif path.startswith("topic/") and path.endswith("/feed"):
+            feed_id = path.split("/")[1]
+        else:
+            feed_id = path.replace("/", "-")
         title = f"SBS News - {feed_id.replace('-', ' ').title()}"
 
         feed = DiscoveredFeed(

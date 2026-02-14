@@ -254,7 +254,7 @@ def test_dead_feed_recorded_not_dropped_on_404(tmp_path: Path) -> None:
 
 
 def test_feed_id_derived_from_url(tmp_path: Path) -> None:
-    """Feed ID is the last path segment of the feed URL."""
+    """Feed ID is derived from URL path segment, not from the trailing /feed."""
     feeds_html = (FIXTURES / "sbs_feeds_page.html").read_text()
     empty_section = "<html><body></body></html>"
 
@@ -270,14 +270,16 @@ def test_feed_id_derived_from_url(tmp_path: Path) -> None:
     feeds = discover_feeds(client, registry)
 
     feed_by_url = {f.url: f for f in feeds}
-    # https://www.sbs.com.au/news/feed -> feed_id = "feed"
-    assert feed_by_url["https://www.sbs.com.au/news/feed"].feed_id == "feed"
-    # https://www.sbs.com.au/news/topic/australia/feed -> feed_id = "feed"
-    # Actually the last segment is "feed" for all topic URLs too
-    # The rsplit logic: url.rstrip("/").rsplit("/", maxsplit=1)[-1]
+    # https://www.sbs.com.au/news/feed -> feed_id = "main"
+    assert feed_by_url["https://www.sbs.com.au/news/feed"].feed_id == "main"
+    # https://www.sbs.com.au/news/topic/australia/feed -> feed_id = "australia"
     assert (
         feed_by_url["https://www.sbs.com.au/news/topic/australia/feed"].feed_id
-        == "feed"
+        == "australia"
+    )
+    # https://www.sbs.com.au/news/topic/world/feed -> feed_id = "world"
+    assert (
+        feed_by_url["https://www.sbs.com.au/news/topic/world/feed"].feed_id == "world"
     )
 
 
@@ -323,3 +325,24 @@ def test_empty_pages_produce_no_feeds(tmp_path: Path) -> None:
 
     assert feeds == []
     assert registry.get_feeds(publisher="sbs") == []
+
+
+def test_all_feeds_have_distinct_feed_ids(tmp_path: Path) -> None:
+    """All discovered SBS feeds have distinct feed_ids (no collisions)."""
+    feeds_html = (FIXTURES / "sbs_feeds_page.html").read_text()
+    section_html = (FIXTURES / "sbs_section_page.html").read_text()
+
+    responses: dict[str, tuple[int, str]] = {
+        FEEDS_PAGE_URL: (200, feeds_html),
+    }
+    for url in SECTION_SEED_URLS:
+        responses[url] = (200, section_html)
+
+    client = _make_mock_client(tmp_path, responses=responses)
+    registry = FeedRegistry(tmp_path / "state")
+
+    feeds = discover_feeds(client, registry)
+
+    feed_ids = [f.feed_id for f in feeds]
+    # All feed_ids should be unique
+    assert len(feed_ids) == len(set(feed_ids)), f"feed_ids are not unique: {feed_ids}"
