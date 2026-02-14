@@ -7,8 +7,6 @@ Covers acceptance criteria:
 
 from pathlib import Path
 
-import httpx
-
 from australianewsrss.discovery.sbs import (
     FEEDS_PAGE_URL,
     SECTION_SEED_URLS,
@@ -17,45 +15,9 @@ from australianewsrss.discovery.sbs import (
     _extract_topic_slugs,
     discover_feeds,
 )
-from australianewsrss.http_client import PoliteHttpClient
-from australianewsrss.state import FeedRegistry, HttpCache
+from australianewsrss.state import FeedRegistry
 
-FIXTURES = Path(__file__).parent / "fixtures"
-
-
-def _make_mock_client(
-    tmp_path: Path,
-    responses: dict[str, tuple[int, str]] | None = None,
-    head_responses: dict[str, int] | None = None,
-    default_html: str = "",
-) -> PoliteHttpClient:
-    """Create a PoliteHttpClient with mock transport.
-
-    responses: dict of URL -> (status, body) for GET requests.
-    head_responses: dict of URL -> status code for HEAD requests (default 200).
-    default_html: fallback HTML for unmatched GET requests.
-    """
-    resp_map = responses or {}
-    head_map = head_responses or {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "HEAD":
-            status = head_map.get(str(request.url), 200)
-            return httpx.Response(status)
-        url_str = str(request.url)
-        if url_str in resp_map:
-            status, body = resp_map[url_str]
-            return httpx.Response(status, text=body)
-        return httpx.Response(200, text=default_html)
-
-    cache = HttpCache(tmp_path / "cache.db")
-    client = PoliteHttpClient(cache, delay_ms=0)
-    client._client = httpx.Client(
-        transport=httpx.MockTransport(handler),
-        headers=client._client.headers,
-    )
-    return client
-
+from .conftest import FIXTURES, make_mock_client
 
 # ---------------------------------------------------------------------------
 # Unit tests for extraction helpers
@@ -147,7 +109,7 @@ def test_feeds_page_urls_discovered(tmp_path: Path) -> None:
     for url in SECTION_SEED_URLS:
         responses[url] = (200, section_html)
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -174,7 +136,7 @@ def test_section_alternate_links_discovered(tmp_path: Path) -> None:
     for url in SECTION_SEED_URLS:
         responses[url] = (200, section_html)
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -199,7 +161,7 @@ def test_topic_slugs_produce_feed_urls(tmp_path: Path) -> None:
     for url in SECTION_SEED_URLS:
         responses[url] = (200, section_html)
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -230,7 +192,7 @@ def test_dead_feed_recorded_not_dropped_on_404(tmp_path: Path) -> None:
         responses[url] = (200, empty_section)
 
     dead_url = "https://www.sbs.com.au/news/topic/australia/feed"
-    client = _make_mock_client(
+    client = make_mock_client(
         tmp_path,
         responses=responses,
         head_responses={dead_url: 404},
@@ -264,7 +226,7 @@ def test_feed_id_derived_from_url(tmp_path: Path) -> None:
     for url in SECTION_SEED_URLS:
         responses[url] = (200, empty_section)
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -294,7 +256,7 @@ def test_all_feeds_have_sbs_publisher(tmp_path: Path) -> None:
     for url in SECTION_SEED_URLS:
         responses[url] = (200, empty_section)
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -318,7 +280,7 @@ def test_empty_pages_produce_no_feeds(tmp_path: Path) -> None:
     for url in SECTION_SEED_URLS:
         responses[url] = (200, empty_html)
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -338,7 +300,7 @@ def test_all_feeds_have_distinct_feed_ids(tmp_path: Path) -> None:
     for url in SECTION_SEED_URLS:
         responses[url] = (200, section_html)
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)

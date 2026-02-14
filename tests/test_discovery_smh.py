@@ -7,8 +7,6 @@ Covers acceptance criteria:
 
 from pathlib import Path
 
-import httpx
-
 from australianewsrss.discovery.smh import (
     BASE_URL,
     HOMEPAGE_URL,
@@ -16,45 +14,9 @@ from australianewsrss.discovery.smh import (
     _extract_nav_slugs,
     discover_feeds,
 )
-from australianewsrss.http_client import PoliteHttpClient
-from australianewsrss.state import FeedRegistry, HttpCache
+from australianewsrss.state import FeedRegistry
 
-FIXTURES = Path(__file__).parent / "fixtures"
-
-
-def _make_mock_client(
-    tmp_path: Path,
-    responses: dict[str, tuple[int, str]] | None = None,
-    head_responses: dict[str, int] | None = None,
-    default_html: str = "",
-) -> PoliteHttpClient:
-    """Create a PoliteHttpClient with mock transport.
-
-    responses: dict of URL -> (status, body) for GET requests.
-    head_responses: dict of URL -> status code for HEAD requests (default 200).
-    default_html: fallback HTML for unmatched GET requests.
-    """
-    resp_map = responses or {}
-    head_map = head_responses or {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "HEAD":
-            status = head_map.get(str(request.url), 200)
-            return httpx.Response(status)
-        url_str = str(request.url)
-        if url_str in resp_map:
-            status, body = resp_map[url_str]
-            return httpx.Response(status, text=body)
-        return httpx.Response(200, text=default_html)
-
-    cache = HttpCache(tmp_path / "cache.db")
-    client = PoliteHttpClient(cache, delay_ms=0)
-    client._client = httpx.Client(
-        transport=httpx.MockTransport(handler),
-        headers=client._client.headers,
-    )
-    return client
-
+from .conftest import FIXTURES, make_mock_client
 
 # ---------------------------------------------------------------------------
 # Unit tests for _extract_nav_slugs
@@ -107,7 +69,7 @@ def test_all_static_feeds_returned(tmp_path: Path) -> None:
         HOMEPAGE_URL: (200, empty_html),
     }
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -126,7 +88,7 @@ def test_static_feeds_all_active_when_head_200(tmp_path: Path) -> None:
         HOMEPAGE_URL: (200, empty_html),
     }
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -148,7 +110,7 @@ def test_nav_slugs_produce_new_feed_urls(tmp_path: Path) -> None:
         HOMEPAGE_URL: (200, homepage_html),
     }
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -166,7 +128,7 @@ def test_nav_discovery_adds_to_static_count(tmp_path: Path) -> None:
         HOMEPAGE_URL: (200, homepage_html),
     }
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -187,7 +149,7 @@ def test_excluded_slugs_not_in_feeds(tmp_path: Path) -> None:
         HOMEPAGE_URL: (200, homepage_html),
     }
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -209,7 +171,7 @@ def test_dead_feed_recorded_not_dropped_on_404(tmp_path: Path) -> None:
     }
 
     dead_url = f"{BASE_URL}/rss/national.xml"
-    client = _make_mock_client(
+    client = make_mock_client(
         tmp_path,
         responses=responses,
         head_responses={dead_url: 404},
@@ -243,7 +205,7 @@ def test_deduplicates_static_and_nav_overlap(tmp_path: Path) -> None:
         HOMEPAGE_URL: (200, homepage_html),
     }
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -266,7 +228,7 @@ def test_feed_id_derived_from_path(tmp_path: Path) -> None:
         HOMEPAGE_URL: (200, empty_html),
     }
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)
@@ -293,7 +255,7 @@ def test_title_format(tmp_path: Path) -> None:
         HOMEPAGE_URL: (200, empty_html),
     }
 
-    client = _make_mock_client(tmp_path, responses=responses)
+    client = make_mock_client(tmp_path, responses=responses)
     registry = FeedRegistry(tmp_path / "state")
 
     feeds = discover_feeds(client, registry)

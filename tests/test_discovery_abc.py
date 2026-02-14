@@ -9,17 +9,15 @@ Covers acceptance criteria:
 
 from pathlib import Path
 
-import httpx
-
 from australianewsrss.discovery.abc import (
     FEED_URL_TEMPLATE,
     _extract_collection_ids,
     discover_feeds,
 )
 from australianewsrss.http_client import PoliteHttpClient
-from australianewsrss.state import FeedRegistry, HttpCache
+from australianewsrss.state import FeedRegistry
 
-FIXTURES = Path(__file__).parent / "fixtures"
+from .conftest import FIXTURES, make_mock_client
 
 
 def _make_mock_client(
@@ -27,28 +25,13 @@ def _make_mock_client(
     seed_html_file: str,
     head_responses: dict[str, int] | None = None,
 ) -> PoliteHttpClient:
-    """Create a PoliteHttpClient with mock transport.
-
-    seed_html_file: fixture filename to return for seed URL GETs.
-    head_responses: dict of URL -> status code for HEAD requests (default 200).
-    """
+    """Create a mock client that returns fixture HTML for all GETs."""
     fixture_html = (FIXTURES / seed_html_file).read_text()
-    head_map = head_responses or {}
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.method == "HEAD":
-            status = head_map.get(str(request.url), 200)
-            return httpx.Response(status)
-        # GET requests return fixture HTML for any seed URL
-        return httpx.Response(200, text=fixture_html)
-
-    cache = HttpCache(tmp_path / "cache.db")
-    client = PoliteHttpClient(cache, delay_ms=0)
-    client._client = httpx.Client(
-        transport=httpx.MockTransport(handler),
-        headers=client._client.headers,
+    return make_mock_client(
+        tmp_path,
+        head_responses=head_responses,
+        default_html=fixture_html,
     )
-    return client
 
 
 # ---------------------------------------------------------------------------
