@@ -1,5 +1,6 @@
 """SBS News feed discovery via Brightspot CMS feeds page and section link tags."""
 
+import logging
 import re
 from datetime import UTC, datetime
 
@@ -39,6 +40,8 @@ _ALTERNATE_LINK_RE2 = re.compile(
 
 # Extract topic slugs from navigation links like /news/topic/{slug}
 _TOPIC_SLUG_RE = re.compile(r"/news/topic/([a-z0-9-]+)", re.IGNORECASE)
+
+logger = logging.getLogger(__name__)
 
 
 def _extract_feed_urls_from_feeds_page(html: str) -> set[str]:
@@ -82,7 +85,9 @@ def discover_feeds(
         html, _cached = client.get(FEEDS_PAGE_URL)
         feed_urls.update(_extract_feed_urls_from_feeds_page(html))
     except Exception:
-        pass
+        logger.warning(
+            "Failed to fetch SBS feeds page %s", FEEDS_PAGE_URL, exc_info=True
+        )
 
     # Step 2: Crawl section pages for <link rel="alternate"> and topic slugs
     for section_url in SECTION_SEED_URLS:
@@ -91,6 +96,9 @@ def discover_feeds(
             feed_urls.update(_extract_alternate_links(html))
             topic_slugs.update(_extract_topic_slugs(html))
         except Exception:
+            logger.warning(
+                "Failed to fetch SBS section URL %s", section_url, exc_info=True
+            )
             continue
 
     # Step 3: Construct topic feed URLs from discovered slugs
@@ -103,6 +111,7 @@ def discover_feeds(
         try:
             status_code = client.head(feed_url)
         except Exception:
+            logger.warning("Failed to probe feed URL %s", feed_url, exc_info=True)
             status_code = 0
 
         status = "active" if status_code == 200 else "dead"

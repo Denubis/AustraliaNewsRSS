@@ -1,5 +1,6 @@
 """SMH feed discovery via static feed paths and navigation crawl."""
 
+import logging
 import re
 from datetime import UTC, datetime
 
@@ -64,6 +65,9 @@ _EXCLUDED_SLUGS = frozenset(
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 def _extract_nav_slugs(html: str) -> set[str]:
     """Extract section slugs from homepage navigation links."""
     slugs: set[str] = set()
@@ -100,7 +104,7 @@ def discover_feeds(
             if slug not in static_slugs:
                 feed_urls.add(f"{BASE_URL}/rss/{slug}.xml")
     except Exception:
-        pass
+        logger.warning("Failed to fetch SMH homepage %s", HOMEPAGE_URL, exc_info=True)
 
     # Step 3: Probe each feed URL
     discovered: list[DiscoveredFeed] = []
@@ -108,6 +112,7 @@ def discover_feeds(
         try:
             status_code = client.head(feed_url)
         except Exception:
+            logger.warning("Failed to probe feed URL %s", feed_url, exc_info=True)
             status_code = 0
 
         status = "active" if status_code == 200 else "dead"
