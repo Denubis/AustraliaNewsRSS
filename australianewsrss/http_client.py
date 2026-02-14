@@ -122,7 +122,7 @@ class PoliteHttpClient:
 
             delay = (retry_dt - datetime.now(UTC)).total_seconds()
             return max(0.0, delay)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             return 1.0  # Default fallback
 
     def close(self) -> None:
