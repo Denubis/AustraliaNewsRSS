@@ -2,6 +2,7 @@
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Literal
 from unittest.mock import MagicMock
 
 import pytest
@@ -19,7 +20,7 @@ from australianewsrss.pipeline.fetch import (
 
 def _make_feed(
     url: str = "https://example.com/feed.xml",
-    publisher: str = "abc",
+    publisher: Literal["abc", "sbs", "smh"] = "abc",
     title: str = "Test Feed",
     feed_id: str = "test-feed",
 ) -> DiscoveredFeed:

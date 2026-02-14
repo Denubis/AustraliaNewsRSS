@@ -1,6 +1,7 @@
 """Tests for australianewsrss.pipeline.enrich enrichment pipeline stage."""
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from australianewsrss.models import (
     DiscoveredFeed,
@@ -35,7 +36,7 @@ def _make_article(
 
 
 def _make_feed(
-    publisher: str = "abc",
+    publisher: Literal["abc", "sbs", "smh"] = "abc",
     url: str = "https://abc.net.au/news/feed/rss.xml",
     title: str = "ABC News",
     category_hint: str = "news",

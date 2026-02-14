@@ -1,6 +1,7 @@
 """Tests for australianewsrss.pipeline.merge module."""
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from australianewsrss.models import (
     DiscoveredFeed,
@@ -16,7 +17,7 @@ LATEST = datetime(2026, 2, 14, 14, 0, 0, tzinfo=UTC)
 
 
 def _make_feed(
-    publisher: str = "abc",
+    publisher: Literal["abc", "sbs", "smh"] = "abc",
     url: str = "https://abc.net.au/feed",
 ) -> DiscoveredFeed:
     return DiscoveredFeed(
@@ -51,7 +52,7 @@ def _make_item(
 
 def _make_fetched(
     items: list[FeedItem],
-    publisher: str = "abc",
+    publisher: Literal["abc", "sbs", "smh"] = "abc",
     feed_url: str = "https://abc.net.au/feed",
 ) -> FetchedFeed:
     return FetchedFeed(
