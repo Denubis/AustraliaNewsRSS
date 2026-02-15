@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   discover:
@@ -33,27 +33,30 @@ jobs:
             http-cache-discover-
             http-cache-
 
+      - name: Restore feed registry
+        uses: actions/cache/restore@v4
+        with:
+          path: state/feeds.json
+          key: feed-registry-
+          restore-keys: |
+            feed-registry-
+
       - name: Run discovery
         run: uv run python -m australianewsrss discover
 
-      - name: Commit registry changes
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add state/feeds.json
-          git diff --cached --quiet && exit 0
-          git commit -m "chore: update feed registry $(date -u +'%Y-%m-%d %H:%M UTC')"
-          git push
+      - name: Save feed registry
+        uses: actions/cache/save@v4
+        with:
+          path: state/feeds.json
+          key: feed-registry-${{ github.run_id }}
 
-      - name: Report changes
+      - name: Report
         if: always()
         run: |
           echo '## Feed Registry Update' >> "$GITHUB_STEP_SUMMARY"
-          if git diff --quiet HEAD~1 -- state/feeds.json 2>/dev/null; then
-            echo 'No changes detected.' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f state/feeds.json ]; then
+            count=$(python3 -c "import json; print(len(json.load(open('state/feeds.json'))))")
+            echo "Total feeds in registry: ${count}" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo 'Registry updated. Changed feeds:' >> "$GITHUB_STEP_SUMMARY"
-            echo '```diff' >> "$GITHUB_STEP_SUMMARY"
-            git diff HEAD~1 -- state/feeds.json | head -50 >> "$GITHUB_STEP_SUMMARY"
-            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            echo 'No registry file produced.' >> "$GITHUB_STEP_SUMMARY"
           fi

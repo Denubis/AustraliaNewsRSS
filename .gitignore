@@ -9,8 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
-# Ephemeral HTTP cache (rebuilt on cache miss)
+# Ephemeral state (rebuilt by workflows, cached in Actions)
 state/http_cache.db
+state/feeds.json
 
 # Git worktrees
 .worktrees/

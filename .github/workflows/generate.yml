@@ -43,6 +43,14 @@ jobs:
             http-cache-generate-
             http-cache-
 
+      - name: Restore feed registry
+        uses: actions/cache/restore@v4
+        with:
+          path: state/feeds.json
+          key: feed-registry-
+          restore-keys: |
+            feed-registry-
+
       - name: Generate feeds
         run: uv run python -m australianewsrss generate --output-dir _site
 
