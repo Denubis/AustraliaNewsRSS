@@ -24,6 +24,15 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked
 
+      - name: Restore HTTP cache
+        uses: actions/cache@v4
+        with:
+          path: state/http_cache.db
+          key: http-cache-discover-${{ github.run_id }}
+          restore-keys: |
+            http-cache-discover-
+            http-cache-
+
       - name: Run discovery
         run: uv run python -m australianewsrss discover
 
