@@ -99,6 +99,11 @@ def _is_supported_feed_url(url: str) -> bool:
     return _normalise_feed_url(url) is not None
 
 
+def is_supported_feed_url(url: str) -> bool:
+    """Public wrapper used by other pipeline stages for feed validation."""
+    return _is_supported_feed_url(url)
+
+
 def _is_supported_feed_path(path: str) -> bool:
     """Return True for known SBS RSS path patterns."""
     if path in _SUPPORTED_PATHS:

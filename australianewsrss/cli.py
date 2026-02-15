@@ -6,6 +6,7 @@ from pathlib import Path
 import typer
 
 from australianewsrss import publishers
+from australianewsrss.discovery import sbs as sbs_discovery
 from australianewsrss.enrichment_rules import get_enrichment_rules
 from australianewsrss.http_client import PoliteHttpClient
 from australianewsrss.pipeline import enrich as enrich_mod
@@ -115,7 +116,25 @@ def generate(
         for slug in publishers.PUBLISHERS:
             config = publishers.get_publisher(slug)
             all_feeds = registry.get_feeds(publisher=slug)
-            active_feeds = [f for f in all_feeds if f.status == "active"]
+
+            # Defense-in-depth: stale registry entries may include noisy
+            # non-feed SBS URLs until the next discovery run.
+            if slug == "sbs":
+                for feed in all_feeds:
+                    if feed.status != "active":
+                        continue
+                    if not sbs_discovery.is_supported_feed_url(feed.url):
+                        registry.mark_status(feed.url, "dead")
+                        logger.warning(
+                            "Marked unsupported SBS feed as dead: %s", feed.url
+                        )
+
+            active_feeds = [
+                f
+                for f in all_feeds
+                if f.status == "active"
+                and (slug != "sbs" or sbs_discovery.is_supported_feed_url(f.url))
+            ]
 
             if not active_feeds:
                 continue

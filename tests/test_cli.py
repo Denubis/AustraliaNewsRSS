@@ -266,7 +266,7 @@ class TestGenerateCommand:
                 ),
                 _feed(
                     publisher="sbs",
-                    url="https://sbs.com.au/feed/1",
+                    url="https://www.sbs.com.au/news/topic/world/feed",
                     feed_id="sbs-1",
                 ),
                 _feed(
@@ -339,6 +339,68 @@ class TestGenerateCommand:
         assert (custom_dir / "feed" / "abc.xml").exists()
         assert (custom_dir / "catalogue.json").exists()
         assert (custom_dir / "index.html").exists()
+
+    def test_generate_excludes_and_retires_unsupported_sbs_feeds(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        state_dir = tmp_path / "state"
+        output_dir = tmp_path / "output"
+        noisy_url = "https://www.sbs.com.au/news/article/feeds/nbv1rs3kw"
+        good_url = "https://www.sbs.com.au/news/topic/world/feed"
+
+        _populate(
+            state_dir,
+            [
+                _feed(
+                    publisher="sbs",
+                    url=noisy_url,
+                    title="SBS News - Article Feeds Nbv1Rs3Kw",
+                    feed_id="article-feeds-nbv1rs3kw",
+                    status="active",
+                ),
+                _feed(
+                    publisher="sbs",
+                    url=good_url,
+                    title="SBS News - World",
+                    feed_id="world",
+                    status="active",
+                ),
+            ],
+        )
+
+        seen_urls: list[str] = []
+
+        def mock_fetch(client, feeds):
+            seen_urls.extend([f.url for f in feeds])
+            return [
+                FetchedFeed(
+                    feed=f,
+                    items=[_item(url=f"https://sbs.example.com/{f.feed_id}")],
+                    was_cached=False,
+                )
+                for f in feeds
+            ]
+
+        monkeypatch.setattr("australianewsrss.pipeline.fetch.fetch_feeds", mock_fetch)
+
+        result = runner.invoke(
+            app,
+            [
+                "generate",
+                "--state-dir",
+                str(state_dir),
+                "--output-dir",
+                str(output_dir),
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert noisy_url not in seen_urls
+        assert good_url in seen_urls
+
+        registry = FeedRegistry(state_dir)
+        by_url = {f.url: f for f in registry.get_feeds(publisher="sbs")}
+        assert by_url[noisy_url].status == "dead"
 
     def test_retains_previous_output_when_fetch_empty(
         self, tmp_path: Path, monkeypatch
