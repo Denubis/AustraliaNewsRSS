@@ -94,6 +94,31 @@ RSS_WITH_ENCLOSURE = """\
 </rss>
 """
 
+RSS_WITH_EMPTY_LINK = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Mixed Feed</title>
+    <item>
+      <title>Valid Article</title>
+      <link>https://example.com/valid</link>
+      <description>Has a link</description>
+      <guid>valid-guid</guid>
+    </item>
+    <item>
+      <title>No Link Article</title>
+      <description>Missing link element entirely</description>
+      <guid>no-link-guid</guid>
+    </item>
+    <item>
+      <title>Empty Link Article</title>
+      <link></link>
+      <description>Link element is empty</description>
+    </item>
+  </channel>
+</rss>
+"""
+
 MALFORMED_XML = "<this is not valid xml at all<<<>>>"
 
 
@@ -294,6 +319,14 @@ class TestParseFeed:
 
         assert len(items) == 1
         assert items[0].image_url == "https://example.com/photo.png"
+
+    def test_skips_items_with_empty_link(self):
+        """Items with empty or missing link elements are excluded."""
+        items = _parse_feed(RSS_WITH_EMPTY_LINK, "https://example.com/mixed.xml")
+
+        assert len(items) == 1
+        assert items[0].url == "https://example.com/valid"
+        assert items[0].title == "Valid Article"
 
 
 # --- Tests for fetch_feeds ---

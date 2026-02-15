@@ -44,16 +44,25 @@ def _parse_feed(xml_string: str, source_feed_url: str) -> list[FeedItem]:
 
     items: list[FeedItem] = []
     for entry in d.entries:
+        link = entry.get("link", "").strip()
+        if not link or not link.startswith(("http://", "https://")):
+            logger.debug(
+                "Skipping entry with empty link in %s: %s",
+                source_feed_url,
+                entry.get("title", "(no title)"),
+            )
+            continue
+
         published = _extract_published(entry)
         image_url = _extract_image_url(entry)
         categories = [tag["term"] for tag in entry.get("tags", [])]
 
         item = FeedItem(
-            url=entry.get("link", ""),
+            url=link,
             title=entry.get("title", ""),
             description=entry.get("summary", entry.get("description", "")),
             published=published,
-            guid=entry.get("id", entry.get("link", "")),
+            guid=entry.get("id", link),
             author=entry.get("author") or None,
             categories=categories,
             image_url=image_url,
