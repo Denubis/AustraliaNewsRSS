@@ -9,7 +9,7 @@ from australianewsrss.state import HttpCache
 
 _DEFAULT_USER_AGENT = (
     "AustraliaNewsRSS/0.1 "
-    "(+https://github.com/BrianBallworthy/AustraliaNewsRSS; feed aggregation)"
+    "(+https://github.com/Denubis/AustraliaNewsRSS; feed aggregation)"
 )
 
 
