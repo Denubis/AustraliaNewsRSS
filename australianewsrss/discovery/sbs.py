@@ -3,6 +3,7 @@
 import logging
 import re
 from datetime import UTC, datetime
+from urllib.parse import urlparse, urlunparse
 
 from australianewsrss.http_client import PoliteHttpClient
 from australianewsrss.models import DiscoveredFeed
@@ -43,15 +44,20 @@ _TOPIC_SLUG_RE = re.compile(r"/news/topic/([a-z0-9-]+)", re.IGNORECASE)
 
 logger = logging.getLogger(__name__)
 
+_SBS_HOST = "www.sbs.com.au"
+_SUPPORTED_PATHS = {
+    "/news/feed",
+    "/news/videos/feed",
+}
+
 
 def _extract_feed_urls_from_feeds_page(html: str) -> set[str]:
     """Extract RSS feed URLs from the SBS feeds page."""
     urls: set[str] = set()
     for match in _FEED_LINK_RE.finditer(html):
-        url = match.group(1)
-        if url.startswith("/"):
-            url = f"https://www.sbs.com.au{url}"
-        urls.add(url)
+        normalised = _normalise_feed_url(match.group(1))
+        if normalised:
+            urls.add(normalised)
     return urls
 
 
@@ -60,16 +66,54 @@ def _extract_alternate_links(html: str) -> set[str]:
     urls: set[str] = set()
     for pattern in [_ALTERNATE_LINK_RE, _ALTERNATE_LINK_RE2]:
         for match in pattern.finditer(html):
-            url = match.group(1)
-            if url.startswith("/"):
-                url = f"https://www.sbs.com.au{url}"
-            urls.add(url)
+            normalised = _normalise_feed_url(match.group(1))
+            if normalised:
+                urls.add(normalised)
     return urls
 
 
 def _extract_topic_slugs(html: str) -> set[str]:
     """Extract topic slugs from navigation links."""
     return {match.group(1) for match in _TOPIC_SLUG_RE.finditer(html)}
+
+
+def _normalise_feed_url(url: str) -> str | None:
+    """Normalise and validate a candidate SBS feed URL."""
+    absolute = url if not url.startswith("/") else f"https://{_SBS_HOST}{url}"
+    parsed = urlparse(absolute)
+
+    if parsed.scheme not in {"http", "https"}:
+        return None
+    if parsed.netloc not in {"sbs.com.au", _SBS_HOST}:
+        return None
+
+    path = parsed.path.rstrip("/")
+    if not _is_supported_feed_path(path):
+        return None
+
+    return urlunparse(("https", _SBS_HOST, path, "", "", ""))
+
+
+def _is_supported_feed_url(url: str) -> bool:
+    """Return True if URL points to a supported SBS feed endpoint."""
+    return _normalise_feed_url(url) is not None
+
+
+def _is_supported_feed_path(path: str) -> bool:
+    """Return True for known SBS RSS path patterns."""
+    if path in _SUPPORTED_PATHS:
+        return True
+    if path == "/news/feeds":
+        return False
+    if path.startswith("/news/article/"):
+        return False
+    if "/feeds/" in path:
+        return False
+    if path.startswith("/news/topic/") and path.endswith("/feed"):
+        return True
+    if path.startswith("/news/") and path.endswith(("/feed", "/rss", ".rss")):
+        return True
+    return False
 
 
 def discover_feeds(
@@ -79,6 +123,11 @@ def discover_feeds(
     now = datetime.now(UTC)
     feed_urls: set[str] = set()
     topic_slugs: set[str] = set()
+
+    # Retire previously recorded noise URLs that are not real feed endpoints.
+    for existing in registry.get_feeds(publisher="sbs"):
+        if not _is_supported_feed_url(existing.url):
+            registry.mark_status(existing.url, "dead")
 
     # Step 1: Crawl the SBS feeds page
     try:

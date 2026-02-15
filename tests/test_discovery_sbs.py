@@ -5,6 +5,7 @@ Covers acceptance criteria:
 - AC1.5: Dead feeds recorded (not dropped) on 404
 """
 
+from datetime import UTC, datetime
 from pathlib import Path
 
 from australianewsrss.discovery.sbs import (
@@ -15,6 +16,7 @@ from australianewsrss.discovery.sbs import (
     _extract_topic_slugs,
     discover_feeds,
 )
+from australianewsrss.models import DiscoveredFeed
 from australianewsrss.state import FeedRegistry
 
 from .conftest import FIXTURES, make_mock_client
@@ -52,6 +54,21 @@ class TestExtractFeedUrlsFromFeedsPage:
     def test_empty_html_returns_empty(self) -> None:
         urls = _extract_feed_urls_from_feeds_page("<html><body></body></html>")
         assert urls == set()
+
+    def test_ignores_article_feeds_and_feeds_index_noise(self) -> None:
+        html = """
+        <html>
+          <body>
+            <a href="https://www.sbs.com.au/news/article/feeds/nbv1rs3kw">Noise</a>
+            <a href="https://www.sbs.com.au/news/feeds">Feeds Index</a>
+            <a href="https://www.sbs.com.au/news/topic/sport/feed">Sport Feed</a>
+          </body>
+        </html>
+        """
+        urls = _extract_feed_urls_from_feeds_page(html)
+        assert "https://www.sbs.com.au/news/topic/sport/feed" in urls
+        assert "https://www.sbs.com.au/news/article/feeds/nbv1rs3kw" not in urls
+        assert "https://www.sbs.com.au/news/feeds" not in urls
 
 
 class TestExtractAlternateLinks:
@@ -287,6 +304,63 @@ def test_empty_pages_produce_no_feeds(tmp_path: Path) -> None:
 
     assert feeds == []
     assert registry.get_feeds(publisher="sbs") == []
+
+
+def test_discovery_ignores_article_feeds_noise(tmp_path: Path) -> None:
+    """Discovery excludes non-feed /news/article/feeds/{token} URLs."""
+    feeds_html = """
+    <html>
+      <body>
+        <a href="https://www.sbs.com.au/news/article/feeds/nbv1rs3kw">Noise</a>
+        <a href="https://www.sbs.com.au/news/topic/world/feed">World Feed</a>
+      </body>
+    </html>
+    """
+    empty_section = "<html><body></body></html>"
+    responses: dict[str, tuple[int, str]] = {FEEDS_PAGE_URL: (200, feeds_html)}
+    for url in SECTION_SEED_URLS:
+        responses[url] = (200, empty_section)
+
+    client = make_mock_client(tmp_path, responses=responses)
+    registry = FeedRegistry(tmp_path / "state")
+
+    feeds = discover_feeds(client, registry)
+
+    urls = {feed.url for feed in feeds}
+    assert "https://www.sbs.com.au/news/topic/world/feed" in urls
+    assert "https://www.sbs.com.au/news/article/feeds/nbv1rs3kw" not in urls
+
+
+def test_discovery_marks_existing_noise_feed_dead(tmp_path: Path) -> None:
+    """Previously discovered noise URLs are retired immediately."""
+    registry = FeedRegistry(tmp_path / "state")
+    now = datetime.now(UTC)
+    noise_url = "https://www.sbs.com.au/news/article/feeds/nbv1rs3kw"
+    registry.upsert(
+        DiscoveredFeed(
+            publisher="sbs",
+            url=noise_url,
+            title="SBS News - Article Feeds Nbv1Rs3Kw",
+            category_hint="article-feeds-nbv1rs3kw",
+            feed_id="article-feeds-nbv1rs3kw",
+            status="active",
+            first_seen=now,
+            last_seen=now,
+            last_checked=now,
+        )
+    )
+
+    empty_html = "<html><body></body></html>"
+    responses: dict[str, tuple[int, str]] = {FEEDS_PAGE_URL: (200, empty_html)}
+    for url in SECTION_SEED_URLS:
+        responses[url] = (200, empty_html)
+
+    client = make_mock_client(tmp_path, responses=responses)
+    discover_feeds(client, registry)
+
+    stored = {feed.url: feed for feed in registry.get_feeds(publisher="sbs")}
+    assert stored[noise_url].status == "dead"
+
 
 
 def test_all_feeds_have_distinct_feed_ids(tmp_path: Path) -> None:
