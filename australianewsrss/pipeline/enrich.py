@@ -17,8 +17,10 @@ def enrich(
 ) -> list[NormalisedArticle]:
     """Apply three enrichment layers to articles.
 
-    Layer 1: Source feed tags -- adds ``publisher:feed_title`` from the
-        source feed that originally contained the article (AC2.4).
+    Layer 1: Source feed tags -- adds human-readable and machine-readable
+        source tags from the feed that originally contained the article:
+        ``publisher:feed_title`` and ``source:publisher:category_hint``
+        (AC2.4).
     Layer 2: Upstream passthrough -- categories already present on the
         article from the upstream feed are preserved (AC2.5).
     Layer 3: Pattern-based rules -- regex rules matched against URL,
@@ -49,9 +51,9 @@ def enrich(
 
         # Layer 1: Source feed tag
         if feed is not None:
-            tag = f"{feed.publisher}:{feed.title}"
-            if tag not in categories:
-                categories.append(tag)
+            for tag in _source_feed_tags(feed):
+                if tag not in categories:
+                    categories.append(tag)
 
         # Layer 2: Upstream passthrough -- already in categories, no-op.
 
@@ -83,3 +85,11 @@ def enrich(
         enriched.append(article.model_copy(update={"categories": tuple(categories)}))
 
     return enriched
+
+
+def _source_feed_tags(feed: DiscoveredFeed) -> tuple[str, ...]:
+    """Build stable source tags for filtering in feed readers."""
+    return (
+        f"{feed.publisher}:{feed.title}",
+        f"source:{feed.publisher}:{feed.category_hint}",
+    )

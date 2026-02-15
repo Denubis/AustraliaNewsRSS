@@ -72,6 +72,21 @@ class TestLayer1SourceFeedTags:
         assert len(result) == 1
         assert "abc:ABC News" in result[0].categories
 
+    def test_adds_machine_readable_source_tag(self) -> None:
+        feed = _make_feed(
+            title="ABC Sport Podcasts",
+            category_hint="sport-podcasts",
+            feed_id="100215546",
+        )
+        article = _make_article()
+        source_feeds = {feed.url: feed}
+        article_sources = {article.canonical_url: feed.url}
+
+        result = enrich([article], source_feeds, article_sources, [])
+
+        assert len(result) == 1
+        assert "source:abc:sport-podcasts" in result[0].categories
+
     def test_no_source_mapping_skips_tag(self) -> None:
         feed = _make_feed()
         article = _make_article()
