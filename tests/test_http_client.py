@@ -208,7 +208,7 @@ class TestUserAgent:
 
     _EXPECTED_UA = (
         "AustraliaNewsRSS/0.1 "
-        "(+https://github.com/BrianBallworthy/AustraliaNewsRSS; feed aggregation)"
+        "(+https://github.com/Denubis/AustraliaNewsRSS; feed aggregation)"
     )
 
     def test_get_request_includes_user_agent(self, tmp_path: Path) -> None:

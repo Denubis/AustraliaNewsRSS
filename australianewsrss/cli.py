@@ -92,7 +92,7 @@ def generate(
         "_site", help="Output directory for generated files."
     ),
     base_url: str = typer.Option(
-        "https://username.github.io/AustraliaNewsRSS/",
+        "https://Denubis.github.io/AustraliaNewsRSS/",
         help="Base URL for self-referencing feed links.",
     ),
     state_dir: str = typer.Option(
