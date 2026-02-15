@@ -14,3 +14,9 @@ state/http_cache.db
 
 # Git worktrees
 .worktrees/
+
+# Build output
+_site/
+
+# Pytest cache
+.pytest_cache/

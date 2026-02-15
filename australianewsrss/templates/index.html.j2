@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+    <meta charset="utf-8">
+    <title>AustraliaNewsRSS — Feed Catalogue</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 0 auto; padding: 1rem; }
+        .status-active { color: green; }
+        .status-dead { color: red; }
+        .status-stale { color: orange; }
+        .status-degraded { color: orange; }
+        table { border-collapse: collapse; width: 100%; margin-bottom: 2rem; }
+        th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+    </style>
+</head>
+<body>
+    <h1>AustraliaNewsRSS</h1>
+    <p>Australian news RSS feed aggregator.</p>
+    {% for publisher_slug, feeds in publishers.items() %}
+    <h2>{{ feeds[0].publisher | upper if feeds else publisher_slug | upper }}</h2>
+    {% if publisher_slug in output_feeds %}
+    <p>📡 <a href="{{ output_feeds[publisher_slug] }}">Everything feed</a></p>
+    {% endif %}
+    <table>
+        <tr><th>Title</th><th>Status</th><th>Feed URL</th></tr>
+        {% for feed in feeds %}
+        <tr>
+            <td>{{ feed.title }}</td>
+            <td class="status-{{ feed.status }}">{{ feed.status }}</td>
+            <td><a href="{{ feed.url }}">{{ feed.url | truncate(60) }}</a></td>
+        </tr>
+        {% endfor %}
+    </table>
+    {% endfor %}
+    <footer><p>Generated {{ generated_at }}</p></footer>
+</body>
+</html>

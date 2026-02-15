@@ -1,7 +1,37 @@
 [project]
 name = "australianewsrss"
 version = "0.1.0"
-description = "Add your description here"
+description = "Programmatic RSS feed discovery and aggregation for Australian news publishers"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "httpx>=0.28",
+    "lxml>=5.3",
+    "feedparser>=6.0",
+    "pydantic>=2.10",
+    "typer>=0.15",
+    "jinja2>=3.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "ruff>=0.9",
+    "ty>=0.0.1a7",
+]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.ty.environment]
+python-version = "3.14"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
