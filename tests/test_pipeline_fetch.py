@@ -119,6 +119,26 @@ RSS_WITH_EMPTY_LINK = """\
 </rss>
 """
 
+RSS_WITH_CHANNEL_METADATA = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>ABC Sport Podcasts</title>
+    <link>https://www.abc.net.au/listen/sport</link>
+    <description>Sport podcasts and interviews</description>
+    <language>en-AU</language>
+    <category>Sport</category>
+    <category>Podcast</category>
+    <item>
+      <title>Episode One</title>
+      <link>https://example.com/sport-ep-1</link>
+      <description>Episode one summary</description>
+      <guid>sport-guid-1</guid>
+    </item>
+  </channel>
+</rss>
+"""
+
 MALFORMED_XML = "<this is not valid xml at all<<<>>>"
 
 
@@ -346,7 +366,10 @@ class TestFetchFeeds:
 
         assert len(results) == 1
         assert isinstance(results[0], FetchedFeed)
-        assert results[0].feed == feed
+        assert results[0].feed.url == feed.url
+        assert results[0].feed.title == "Test Feed"
+        assert results[0].feed.category_hint == "test-feed"
+        assert results[0].feed.metadata.title == "Test Feed"
         assert results[0].was_cached is False
         assert len(results[0].items) == 2
 
@@ -417,3 +440,56 @@ class TestFetchFeeds:
             "https://example.com/fail.xml" in record.message
             for record in caplog.records
         )
+
+    def test_updates_feed_metadata_from_channel(self, tmp_path: Path):
+        from tests.conftest import make_mock_client
+
+        feed = _make_feed(
+            url="https://example.com/sport-podcasts.xml",
+            title="ABC News Feed 100215546",
+            feed_id="100215546",
+        )
+        client = make_mock_client(
+            tmp_path,
+            responses={
+                "https://example.com/sport-podcasts.xml": (
+                    200,
+                    RSS_WITH_CHANNEL_METADATA,
+                ),
+            },
+        )
+
+        results = fetch_feeds(client, [feed])
+
+        assert len(results) == 1
+        hydrated = results[0].feed
+        assert hydrated.title == "ABC Sport Podcasts"
+        assert hydrated.category_hint == "sport"
+        assert hydrated.metadata.description == "Sport podcasts and interviews"
+        assert hydrated.metadata.link == "https://www.abc.net.au/listen/sport"
+        assert hydrated.metadata.language == "en-AU"
+        assert hydrated.metadata.categories == ("Sport", "Podcast")
+
+    def test_preserves_non_generic_category_hint(self, tmp_path: Path):
+        from tests.conftest import make_mock_client
+
+        feed = _make_feed(
+            url="https://example.com/sbs-technology.xml",
+            title="SBS News - Technology",
+            feed_id="technology",
+        ).model_copy(update={"category_hint": "technology"})
+        client = make_mock_client(
+            tmp_path,
+            responses={
+                "https://example.com/sbs-technology.xml": (
+                    200,
+                    MINIMAL_RSS,
+                ),
+            },
+        )
+
+        results = fetch_feeds(client, [feed])
+
+        assert len(results) == 1
+        hydrated = results[0].feed
+        assert hydrated.category_hint == "technology"

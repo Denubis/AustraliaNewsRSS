@@ -162,8 +162,17 @@ def generate_catalogue(registry: FeedRegistry) -> str:
             {
                 "publisher": f.publisher,
                 "title": f.title,
+                "feed_id": f.feed_id,
+                "category_hint": f.category_hint,
                 "url": f.url,
                 "status": f.status,
+                "metadata": {
+                    "title": f.metadata.title,
+                    "description": f.metadata.description,
+                    "link": f.metadata.link,
+                    "language": f.metadata.language,
+                    "categories": list(f.metadata.categories),
+                },
                 "first_seen": (f.first_seen.isoformat() if f.first_seen else None),
                 "last_seen": (f.last_seen.isoformat() if f.last_seen else None),
                 "last_checked": (

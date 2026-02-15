@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
-from australianewsrss.models import DiscoveredFeed
+from australianewsrss.models import DiscoveredFeed, FeedMetadata
 from australianewsrss.pipeline.generate import generate_catalogue, generate_index
 from australianewsrss.state import FeedRegistry
 
@@ -52,9 +52,35 @@ class TestGenerateCatalogue:
         assert feed["title"] == "ABC Top Stories"
         assert feed["url"] == "https://www.abc.net.au/news/feed/1234/rss.xml"
         assert feed["status"] == "active"
+        assert feed["feed_id"] == "1234"
+        assert feed["category_hint"] == "news"
         assert "first_seen" in feed
         assert "last_seen" in feed
         assert "last_checked" in feed
+
+    def test_catalogue_exposes_upstream_feed_metadata(self, tmp_path: Path) -> None:
+        registry = FeedRegistry(tmp_path)
+        registry.upsert(
+            _make_feed(
+                metadata=FeedMetadata(
+                    title="ABC Sport Podcasts",
+                    description="Sport podcasts and interviews",
+                    link="https://www.abc.net.au/listen/sport",
+                    language="en-AU",
+                    categories=("Sport", "Podcast"),
+                )
+            )
+        )
+
+        result = generate_catalogue(registry)
+        data = json.loads(result)
+
+        feed = data["feeds"][0]
+        assert feed["metadata"]["title"] == "ABC Sport Podcasts"
+        assert feed["metadata"]["description"] == "Sport podcasts and interviews"
+        assert feed["metadata"]["link"] == "https://www.abc.net.au/listen/sport"
+        assert feed["metadata"]["language"] == "en-AU"
+        assert feed["metadata"]["categories"] == ["Sport", "Podcast"]
 
     def test_catalogue_feeds_sorted_by_publisher_then_url(self, tmp_path: Path) -> None:
         registry = FeedRegistry(tmp_path)

@@ -122,6 +122,11 @@ def generate(
 
             fetched = fetch.fetch_feeds(client, active_feeds)
 
+            # Persist hydrated feed metadata (title/category hints) so
+            # catalogue and future runs use real upstream channel labels.
+            for fetched_feed in fetched:
+                registry.upsert(fetched_feed.feed)
+
             # Build source mappings for enrichment
             source_feeds = {ff.feed.url: ff.feed for ff in fetched}
             article_sources: dict[str, str] = {}

@@ -1,15 +1,18 @@
 """Feed fetching and RSS parsing pipeline stage."""
 
 import logging
+import re
 from datetime import UTC, datetime
 from typing import Any
 
 import feedparser
 
 from australianewsrss.http_client import PoliteHttpClient
-from australianewsrss.models import DiscoveredFeed, FeedItem, FetchedFeed
+from australianewsrss.models import DiscoveredFeed, FeedItem, FeedMetadata, FetchedFeed
 
 logger = logging.getLogger(__name__)
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
 def fetch_feeds(
@@ -24,15 +27,31 @@ def fetch_feeds(
             logger.warning("Failed to fetch feed %s", feed.url, exc_info=True)
             continue
 
-        items = _parse_feed(xml_string, feed.url)
-        results.append(FetchedFeed(feed=feed, items=items, was_cached=was_cached))
+        metadata, items = _parse_feed_document(xml_string, feed.url)
+        hydrated_feed = _merge_feed_metadata(feed, metadata)
+        results.append(
+            FetchedFeed(
+                feed=hydrated_feed,
+                items=items,
+                was_cached=was_cached,
+            )
+        )
 
     return results
 
 
 def _parse_feed(xml_string: str, source_feed_url: str) -> list[FeedItem]:
     """Parse RSS XML into FeedItem objects."""
+    _, items = _parse_feed_document(xml_string, source_feed_url)
+    return items
+
+
+def _parse_feed_document(
+    xml_string: str, source_feed_url: str
+) -> tuple[FeedMetadata, list[FeedItem]]:
+    """Parse RSS XML into channel metadata and feed items."""
     d = feedparser.parse(xml_string)
+    metadata = _extract_feed_metadata(d.feed)
 
     if d.bozo and len(d.entries) == 0:
         logger.warning(
@@ -40,7 +59,7 @@ def _parse_feed(xml_string: str, source_feed_url: str) -> list[FeedItem]:
             source_feed_url,
             d.bozo_exception,
         )
-        return []
+        return metadata, []
 
     items: list[FeedItem] = []
     for entry in d.entries:
@@ -70,7 +89,98 @@ def _parse_feed(xml_string: str, source_feed_url: str) -> list[FeedItem]:
         )
         items.append(item)
 
-    return items
+    return metadata, items
+
+
+def _extract_feed_metadata(feed: Any) -> FeedMetadata:
+    """Extract channel-level metadata from a parsed feed."""
+    title = _clean_text(feed.get("title"))
+    description = _clean_text(feed.get("subtitle")) or _clean_text(
+        feed.get("description")
+    )
+    link = _clean_text(feed.get("link"))
+    language = _clean_text(feed.get("language"))
+
+    categories: list[str] = []
+    seen_categories: set[str] = set()
+    for tag in feed.get("tags", []):
+        term = _clean_text(tag.get("term"))
+        if term and term not in seen_categories:
+            seen_categories.add(term)
+            categories.append(term)
+
+    return FeedMetadata(
+        title=title,
+        description=description,
+        link=link,
+        language=language,
+        categories=tuple(categories),
+    )
+
+
+def _merge_feed_metadata(
+    feed: DiscoveredFeed, metadata: FeedMetadata
+) -> DiscoveredFeed:
+    """Merge parsed metadata into a discovered feed."""
+    if metadata == FeedMetadata():
+        return feed
+
+    title = metadata.title or feed.title
+    category_hint = _derive_category_hint(feed.category_hint, metadata)
+
+    merged_metadata = feed.metadata.model_copy(
+        update={
+            "title": metadata.title or feed.metadata.title,
+            "description": metadata.description or feed.metadata.description,
+            "link": metadata.link or feed.metadata.link,
+            "language": metadata.language or feed.metadata.language,
+            "categories": (
+                metadata.categories
+                if metadata.categories
+                else feed.metadata.categories
+            ),
+        }
+    )
+
+    return feed.model_copy(
+        update={
+            "title": title,
+            "category_hint": category_hint,
+            "metadata": merged_metadata,
+        }
+    )
+
+
+def _derive_category_hint(existing_hint: str, metadata: FeedMetadata) -> str:
+    """Derive a filter-friendly category hint from channel metadata."""
+    if not _is_generic_hint(existing_hint):
+        return existing_hint
+
+    for candidate in (*metadata.categories, metadata.title):
+        if not candidate:
+            continue
+        slug = _slugify(candidate)
+        if slug:
+            return slug
+    return existing_hint
+
+
+def _is_generic_hint(hint: str) -> bool:
+    """Return True when the hint is a low-signal placeholder."""
+    return hint in {"collection", "dynamic", "general"} or hint.isdigit()
+
+
+def _slugify(value: str) -> str:
+    """Normalise a free-text value into a lowercase slug."""
+    return _SLUG_RE.sub("-", value.lower()).strip("-")
+
+
+def _clean_text(value: Any) -> str | None:
+    """Trim textual values and normalise empty strings to None."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
 
 
 def _extract_published(entry: Any) -> datetime | None:

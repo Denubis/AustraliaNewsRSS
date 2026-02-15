@@ -5,6 +5,16 @@ from typing import Literal
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 
 
+class FeedMetadata(BaseModel):
+    """Channel-level metadata parsed from an upstream feed."""
+
+    title: str | None = None
+    description: str | None = None
+    link: str | None = None
+    language: str | None = None
+    categories: tuple[str, ...] = ()
+
+
 class DiscoveredFeed(BaseModel):
     """Feed found during discovery."""
 
@@ -17,6 +27,7 @@ class DiscoveredFeed(BaseModel):
     first_seen: AwareDatetime
     last_seen: AwareDatetime | None = None
     last_checked: AwareDatetime | None = None
+    metadata: FeedMetadata = Field(default_factory=FeedMetadata)
 
 
 class FeedItem(BaseModel):
