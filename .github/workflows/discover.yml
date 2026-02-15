@@ -1,0 +1,50 @@
+name: Discover feeds
+
+on:
+  schedule:
+    # Daily at 06:07 AEST (20:07 UTC previous day)
+    # Offset by 7 minutes to avoid GitHub load concentration
+    - cron: "7 20 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  discover:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Install dependencies
+        run: uv sync --locked
+
+      - name: Run discovery
+        run: uv run python -m australianewsrss discover
+
+      - name: Commit registry changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add state/feeds.json
+          git diff --cached --quiet && exit 0
+          git commit -m "chore: update feed registry $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push
+
+      - name: Report changes
+        if: always()
+        run: |
+          echo '## Feed Registry Update' >> "$GITHUB_STEP_SUMMARY"
+          if git diff --quiet HEAD~1 -- state/feeds.json 2>/dev/null; then
+            echo 'No changes detected.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'Registry updated. Changed feeds:' >> "$GITHUB_STEP_SUMMARY"
+            echo '```diff' >> "$GITHUB_STEP_SUMMARY"
+            git diff HEAD~1 -- state/feeds.json | head -50 >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
